@@ -114,8 +114,23 @@ class CheckInDB extends Dexie {
 
 export const db = new CheckInDB()
 
+const DEFAULT_CATEGORY_NAMES = ['健身', '阅读', '学习', '生活']
+
 export async function seedCategories(): Promise<void> {
-  await db.transaction('rw', db.categories, async () => {
+  await db.transaction('rw', db.categories, db.checkIns, async () => {
+    // 清理重复的默认分类（保留 id 最小的一个）
+    for (const name of DEFAULT_CATEGORY_NAMES) {
+      const cats = await db.categories.where({ name }).toArray()
+      if (cats.length > 1) {
+        cats.sort((a, b) => a.id! - b.id!)
+        const keepId = cats[0].id!
+        for (let i = 1; i < cats.length; i++) {
+          await db.checkIns.where({ categoryId: cats[i].id }).modify({ categoryId: keepId })
+          await db.categories.delete(cats[i].id!)
+        }
+      }
+    }
+
     const count = await db.categories.count()
     if (count === 0) {
       await db.categories.bulkAdd([
