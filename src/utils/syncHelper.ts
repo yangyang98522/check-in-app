@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/authStore'
 import { syncToCloud } from '../services/syncService'
+import { showToast } from './toast'
 
 let syncTimer: number | null = null
 let isSyncing = false
@@ -21,8 +22,10 @@ export function scheduleCloudSync(delay = 5000): void {
     try {
       await syncToCloud(authStore.user!.id)
       console.log('已同步到云端')
+      showToast('已同步到云端', 'success')
     } catch (err) {
       console.error('同步到云端失败', err)
+      showToast('同步到云端失败', 'error')
     } finally {
       isSyncing = false
       syncTimer = null

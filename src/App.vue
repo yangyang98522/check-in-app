@@ -7,6 +7,7 @@ import { useCheckInStore } from './stores/checkInStore'
 import { syncFromCloud } from './services/syncService'
 import { cleanupDuplicateCategories } from './db'
 import CategorySidebar from './components/CategorySidebar.vue'
+import ToastContainer from './components/ToastContainer.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -38,5 +39,6 @@ onMounted(async () => {
       <router-view />
     </main>
     <router-view v-else />
+    <ToastContainer />
   </div>
 </template>
