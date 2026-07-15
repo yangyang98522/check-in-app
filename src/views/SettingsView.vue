@@ -1,0 +1,153 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useCategoryStore } from '../stores/categoryStore'
+import { useCheckInStore } from '../stores/checkInStore'
+import { db } from '../db'
+import { Download, Upload, Trash2, Save } from 'lucide-vue-next'
+
+const categoryStore = useCategoryStore()
+const checkInStore = useCheckInStore()
+
+const storageInfo = ref('')
+
+async function calcStorage() {
+  let total = 0
+  const files = await db.mediaFiles.toArray()
+  files.forEach((f) => (total += f.size))
+  const count = files.length
+  storageInfo.value = `${count} 个文件，约 ${(total / 1024 / 1024).toFixed(2)} MB`
+}
+calcStorage()
+
+async function exportData() {
+  const categories = await db.categories.toArray()
+  const checkIns = await db.checkIns.toArray()
+  const mediaFiles = await db.mediaFiles.toArray()
+
+  const payload = { categories, checkIns, mediaFiles: mediaFiles.map((m) => ({ ...m, blob: undefined })) }
+  const payloadBlob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
+
+  // 导出 JSON 元数据（媒体文件需要额外手动备份）
+  const url = URL.createObjectURL(payloadBlob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `check-in-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function importData() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      await db.transaction('rw', db.categories, db.checkIns, db.mediaFiles, async () => {
+        if (data.categories?.length) await db.categories.bulkPut(data.categories)
+        if (data.checkIns?.length) await db.checkIns.bulkPut(data.checkIns)
+      })
+      await categoryStore.load()
+      await checkInStore.load()
+      alert('导入成功')
+    } catch (err) {
+      alert('导入失败：' + (err as Error).message)
+    }
+  }
+  input.click()
+}
+
+async function clearAll() {
+  if (confirm('确定清空所有数据吗？此操作不可恢复，建议先导出备份。')) {
+    await db.delete()
+    location.reload()
+  }
+}
+
+const editingCategory = ref<number | null>(null)
+const editName = ref('')
+
+function startEdit(cat: { id?: number; name: string }) {
+  editingCategory.value = cat.id!
+  editName.value = cat.name
+}
+
+async function saveEdit(id: number) {
+  if (editName.value.trim()) {
+    await categoryStore.update(id, { name: editName.value.trim() })
+  }
+  editingCategory.value = null
+}
+</script>
+
+<template>
+  <div class="max-w-4xl mx-auto space-y-6">
+    <h2 class="text-2xl font-bold text-slate-800">设置</h2>
+
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+      <h3 class="text-base font-semibold text-slate-800 mb-4">分类管理</h3>
+      <div class="space-y-2">
+        <div
+          v-for="cat in categoryStore.allCategories"
+          :key="cat.id"
+          class="flex items-center justify-between p-3 rounded-xl border border-slate-100"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: cat.color }" />
+            <span v-if="editingCategory !== cat.id" class="text-slate-700">{{ cat.name }}</span>
+            <input
+              v-else
+              v-model="editName"
+              type="text"
+              class="px-2 py-1 border border-slate-300 rounded text-sm"
+              @keyup.enter="saveEdit(cat.id!)"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="editingCategory !== cat.id"
+              class="text-sm text-blue-600 hover:underline"
+              @click="startEdit(cat)"
+            >
+              重命名
+            </button>
+            <button v-else class="text-sm text-blue-600 hover:underline" @click="saveEdit(cat.id!)">
+              <Save :size="16" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+      <h3 class="text-base font-semibold text-slate-800 mb-4">数据管理</h3>
+      <p class="text-sm text-slate-500 mb-4">当前媒体占用：{{ storageInfo || '计算中...' }}</p>
+      <div class="flex flex-wrap gap-3">
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+          @click="exportData"
+        >
+          <Download :size="16" />
+          导出备份
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+          @click="importData"
+        >
+          <Upload :size="16" />
+          导入备份
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+          @click="clearAll"
+        >
+          <Trash2 :size="16" />
+          清空数据
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
