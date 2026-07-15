@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useCategoryStore } from '../stores/categoryStore'
 import { useCheckInStore } from '../stores/checkInStore'
+import { useAuthStore } from '../stores/authStore'
 import { db } from '../db'
-import { Download, Upload, Trash2, Save } from 'lucide-vue-next'
+import { syncFromCloud, syncToCloud } from '../services/syncService'
+import { Download, Upload, Trash2, Save, CloudDownload, CloudUpload, LogIn } from 'lucide-vue-next'
 
+const router = useRouter()
 const categoryStore = useCategoryStore()
 const checkInStore = useCheckInStore()
+const authStore = useAuthStore()
 
 const storageInfo = ref('')
+const syncLoading = ref(false)
+const syncMessage = ref('')
 
 async function calcStorage() {
   let total = 0
@@ -67,6 +74,36 @@ async function clearAll() {
   }
 }
 
+async function pullFromCloud() {
+  if (!authStore.user) return
+  syncLoading.value = true
+  syncMessage.value = ''
+  try {
+    const synced = await syncFromCloud(authStore.user.id)
+    await categoryStore.load()
+    await checkInStore.load()
+    syncMessage.value = synced ? '已从云端恢复数据' : '云端暂无数据'
+  } catch (err) {
+    syncMessage.value = '恢复失败：' + (err as Error).message
+  } finally {
+    syncLoading.value = false
+  }
+}
+
+async function pushToCloud() {
+  if (!authStore.user) return
+  syncLoading.value = true
+  syncMessage.value = ''
+  try {
+    await syncToCloud(authStore.user.id)
+    syncMessage.value = '已同步到云端'
+  } catch (err) {
+    syncMessage.value = '同步失败：' + (err as Error).message
+  } finally {
+    syncLoading.value = false
+  }
+}
+
 const editingCategory = ref<number | null>(null)
 const editName = ref('')
 
@@ -119,6 +156,44 @@ async function saveEdit(id: number) {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+      <h3 class="text-base font-semibold text-slate-800 mb-4">云端同步</h3>
+      <p class="text-sm text-slate-500 mb-4">
+        {{ authStore.isLoggedIn ? `当前登录：${authStore.user?.email}` : '登录后可将数据同步到云端，换设备不丢失' }}
+      </p>
+      <div v-if="syncMessage" class="mb-4 p-3 bg-blue-50 text-blue-700 text-sm rounded-lg">
+        {{ syncMessage }}
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <template v-if="authStore.isLoggedIn">
+          <button
+            class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+            :disabled="syncLoading"
+            @click="pullFromCloud"
+          >
+            <CloudDownload :size="16" />
+            {{ syncLoading ? '同步中...' : '从云端恢复' }}
+          </button>
+          <button
+            class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+            :disabled="syncLoading"
+            @click="pushToCloud"
+          >
+            <CloudUpload :size="16" />
+            {{ syncLoading ? '同步中...' : '同步到云端' }}
+          </button>
+        </template>
+        <button
+          v-else
+          class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          @click="router.push('/login')"
+        >
+          <LogIn :size="16" />
+          登录 / 注册
+        </button>
       </div>
     </div>
 

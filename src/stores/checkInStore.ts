@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { db, type CheckIn, type MediaFile } from '../db'
 import { extractTitle, extractTopics } from '../utils/extract'
+import { scheduleCloudSync } from '../utils/syncHelper'
 
 export interface CheckInForm {
   categoryId: number
@@ -52,6 +53,7 @@ export const useCheckInStore = defineStore('checkIn', () => {
     }
 
     await load()
+    scheduleCloudSync()
     return checkIns.value.find((ci) => ci.id === id)!
   }
 
@@ -83,6 +85,7 @@ export const useCheckInStore = defineStore('checkIn', () => {
     }
 
     await load()
+    scheduleCloudSync()
   }
 
   async function remove(id: number): Promise<void> {
@@ -91,6 +94,7 @@ export const useCheckInStore = defineStore('checkIn', () => {
       await db.checkIns.delete(id)
     })
     await load()
+    scheduleCloudSync()
   }
 
   function getByCategory(categoryId: number): CheckIn[] {

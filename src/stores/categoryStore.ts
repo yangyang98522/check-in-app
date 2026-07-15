@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { db, seedCategories, type Category } from '../db'
+import { scheduleCloudSync } from '../utils/syncHelper'
 
 export const useCategoryStore = defineStore('category', () => {
   const categories = ref<Category[]>([])
@@ -24,12 +25,14 @@ export const useCategoryStore = defineStore('category', () => {
       createdAt: Date.now()
     })
     await load()
+    scheduleCloudSync()
     return id as number
   }
 
   async function update(id: number, changes: Partial<Category>): Promise<void> {
     await db.categories.update(id, changes)
     await load()
+    scheduleCloudSync()
   }
 
   async function remove(id: number): Promise<void> {
@@ -42,6 +45,7 @@ export const useCategoryStore = defineStore('category', () => {
       await db.categories.delete(id)
     })
     await load()
+    scheduleCloudSync()
   }
 
   function getById(id: number): Category | undefined {

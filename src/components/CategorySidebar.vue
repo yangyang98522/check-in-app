@@ -3,12 +3,14 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCategoryStore } from '../stores/categoryStore'
 import { useCheckInStore } from '../stores/checkInStore'
-import { LayoutDashboard, Tag, BarChart3, Settings, Plus, Dumbbell, BookOpen, GraduationCap, Coffee, Sun, Moon, Music, PenTool } from 'lucide-vue-next'
+import { useAuthStore } from '../stores/authStore'
+import { LayoutDashboard, Tag, BarChart3, Settings, Plus, Dumbbell, BookOpen, GraduationCap, Coffee, Sun, Moon, Music, PenTool, LogIn, LogOut } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 const categoryStore = useCategoryStore()
 const checkInStore = useCheckInStore()
+const authStore = useAuthStore()
 
 const newName = ref('')
 const showAdd = ref(false)
@@ -133,6 +135,22 @@ const totalCount = computed(() => checkInStore.allCheckIns.length)
         <div :class="navClass('/settings')" @click="router.push('/settings')">
           <Settings :size="18" />
           <span>设置</span>
+        </div>
+        <div
+          v-if="!authStore.isLoggedIn"
+          :class="navClass('/login')"
+          @click="router.push('/login')"
+        >
+          <LogIn :size="18" />
+          <span>登录 / 注册</span>
+        </div>
+        <div
+          v-else
+          class="flex items-center gap-3 px-4 py-3 rounded-xl transition-colors cursor-pointer text-slate-600 hover:bg-slate-100"
+          @click="authStore.signOut"
+        >
+          <LogOut :size="18" />
+          <span>退出登录</span>
         </div>
       </div>
     </div>
