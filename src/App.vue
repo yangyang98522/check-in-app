@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/authStore'
 import { useCategoryStore } from './stores/categoryStore'
 import { useCheckInStore } from './stores/checkInStore'
 import { syncFromCloud } from './services/syncService'
+import { cleanupDuplicateCategories } from './db'
 import CategorySidebar from './components/CategorySidebar.vue'
 
 const route = useRoute()
@@ -13,6 +14,7 @@ const categoryStore = useCategoryStore()
 const checkInStore = useCheckInStore()
 
 onMounted(async () => {
+  await cleanupDuplicateCategories()
   await authStore.init()
   if (authStore.user) {
     try {

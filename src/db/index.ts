@@ -127,3 +127,24 @@ export async function seedCategories(): Promise<void> {
     }
   })
 }
+
+export async function cleanupDuplicateCategories(): Promise<void> {
+  await db.transaction('rw', db.categories, db.checkIns, async () => {
+    const categories = await db.categories.toArray()
+    const groups = new Map<string, number[]>()
+    for (const c of categories) {
+      if (!groups.has(c.name)) groups.set(c.name, [])
+      groups.get(c.name)!.push(c.id!)
+    }
+    for (const ids of groups.values()) {
+      if (ids.length > 1) {
+        ids.sort((a, b) => a - b)
+        const keepId = ids[0]
+        for (let i = 1; i < ids.length; i++) {
+          await db.checkIns.where({ categoryId: ids[i] }).modify({ categoryId: keepId })
+          await db.categories.delete(ids[i])
+        }
+      }
+    }
+  })
+}
