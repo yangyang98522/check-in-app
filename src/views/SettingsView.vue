@@ -70,7 +70,7 @@ function importData() {
 async function clearAll() {
   if (confirm('确定清空所有数据吗？此操作不可恢复，建议先导出备份。')) {
     await db.delete()
-    location.reload()
+    router.push('/')
   }
 }
 
