@@ -82,33 +82,110 @@ export async function download(userId: string): Promise<SyncData | null> {
   return JSON.parse(text) as SyncData
 }
 
-export async function restore(data: SyncData): Promise<void> {
+export async function merge(data: SyncData): Promise<void> {
+  const localCategories = await db.categories.toArray()
+  const localCheckIns = await db.checkIns.toArray()
+  const localMediaFiles = await db.mediaFiles.toArray()
+
+  // Merge categories by uuid, keep the one with later updatedAt
+  const categoryMap = new Map<string, Category>()
+  for (const c of localCategories) {
+    if (c.uuid) categoryMap.set(c.uuid, c)
+  }
+  for (const c of data.categories) {
+    if (!c.uuid) continue
+    const local = categoryMap.get(c.uuid)
+    const remoteTime = c.updatedAt || c.createdAt || 0
+    const localTime = local ? (local.updatedAt || local.createdAt || 0) : 0
+    if (!local || remoteTime > localTime) {
+      categoryMap.set(c.uuid, c)
+    }
+  }
+  const mergedCategories = Array.from(categoryMap.values()).sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const categoryUuidToId = new Map<string, number>()
+  for (let i = 0; i < mergedCategories.length; i++) {
+    mergedCategories[i].id = i + 1
+    categoryUuidToId.set(mergedCategories[i].uuid, mergedCategories[i].id!)
+  }
+
+  // Merge checkIns by uuid
+  const checkInMap = new Map<string, CheckIn>()
+  for (const ci of localCheckIns) {
+    if (ci.uuid) checkInMap.set(ci.uuid, ci)
+  }
+  for (const ci of data.checkIns) {
+    if (!ci.uuid) continue
+    const local = checkInMap.get(ci.uuid)
+    const remoteTime = ci.updatedAt || ci.createdAt || 0
+    const localTime = local ? (local.updatedAt || local.createdAt || 0) : 0
+    if (!local || remoteTime > localTime) {
+      checkInMap.set(ci.uuid, ci)
+    }
+  }
+  const mergedCheckIns = Array.from(checkInMap.values())
+
+  const checkInUuidToId = new Map<string, number>()
+  for (let i = 0; i < mergedCheckIns.length; i++) {
+    const ci = mergedCheckIns[i]
+    ci.id = i + 1
+    checkInUuidToId.set(ci.uuid, ci.id!)
+    if (ci.categoryUuid && categoryUuidToId.has(ci.categoryUuid)) {
+      ci.categoryId = categoryUuidToId.get(ci.categoryUuid)!
+    }
+  }
+
+  // Merge mediaFiles by uuid
+  const mediaFileMap = new Map<string, MediaFile>()
+  for (const m of localMediaFiles) {
+    if (m.uuid) mediaFileMap.set(m.uuid, m)
+  }
+  for (const m of data.mediaFiles) {
+    if (!m.uuid) continue
+    const local = mediaFileMap.get(m.uuid)
+    const remoteTime = m.createdAt || 0
+    const localTime = local ? (local.createdAt || 0) : 0
+    if (!local || remoteTime > localTime) {
+      const blob = base64ToBlob(m.blob)
+      const thumbnail = m.thumbnail ? base64ToBlob(m.thumbnail) : undefined
+      mediaFileMap.set(m.uuid, { ...m, blob, thumbnail } as MediaFile)
+    }
+  }
+  const mergedMediaFiles = Array.from(mediaFileMap.values())
+  for (let i = 0; i < mergedMediaFiles.length; i++) {
+    const m = mergedMediaFiles[i]
+    m.id = i + 1
+    if (m.checkInUuid && checkInUuidToId.has(m.checkInUuid)) {
+      m.checkInId = checkInUuidToId.get(m.checkInUuid)!
+    }
+  }
+
+  // Clear and re-insert with clean sequential ids
   await db.transaction('rw', db.categories, db.checkIns, db.mediaFiles, async () => {
     await db.categories.clear()
     await db.checkIns.clear()
     await db.mediaFiles.clear()
 
-    if (data.categories.length) {
-      await db.categories.bulkAdd(data.categories)
+    if (mergedCategories.length) {
+      await db.categories.bulkAdd(mergedCategories)
     }
-    if (data.checkIns.length) {
-      await db.checkIns.bulkAdd(data.checkIns)
+    if (mergedCheckIns.length) {
+      await db.checkIns.bulkAdd(mergedCheckIns)
     }
-    if (data.mediaFiles.length) {
-      const mediaFiles = data.mediaFiles.map(m => ({
-        ...m,
-        blob: base64ToBlob(m.blob),
-        thumbnail: m.thumbnail ? base64ToBlob(m.thumbnail) : undefined
-      }))
-      await db.mediaFiles.bulkAdd(mediaFiles as MediaFile[])
+    if (mergedMediaFiles.length) {
+      await db.mediaFiles.bulkAdd(mergedMediaFiles)
     }
   })
+}
+
+export async function restore(data: SyncData): Promise<void> {
+  await merge(data)
 }
 
 export async function syncFromCloud(userId: string): Promise<boolean> {
   const data = await download(userId)
   if (!data) return false
-  await restore(data)
+  await merge(data)
   return true
 }
 

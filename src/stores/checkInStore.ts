@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { db, type CheckIn, type MediaFile } from '../db'
 import { extractTitle, extractTopics } from '../utils/extract'
+import { generateUUID } from '../utils/uuid'
 import { scheduleCloudSync } from '../utils/syncHelper'
 
 export interface CheckInForm {
@@ -30,25 +31,33 @@ export const useCheckInStore = defineStore('checkIn', () => {
   async function add(form: CheckInForm): Promise<CheckIn> {
     const title = extractTitle(form.content)
     const topicTags = extractTopics(form.content)
+    const now = Date.now()
+
+    const category = await db.categories.get(form.categoryId)
+    const checkInUuid = generateUUID()
 
     const id = await db.checkIns.add({
       categoryId: form.categoryId,
+      categoryUuid: category?.uuid,
       title,
       content: form.content,
       recordDate: form.recordDate,
       recordTime: form.recordTime,
       topicTags,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      uuid: checkInUuid,
+      createdAt: now,
+      updatedAt: now
     })
 
     for (const item of form.mediaFiles) {
       await db.mediaFiles.add({
-        checkInId: id,
+        checkInId: id as number,
+        checkInUuid,
         fileType: item.type,
         blob: item.file,
         size: item.file.size,
-        createdAt: Date.now()
+        uuid: generateUUID(),
+        createdAt: now
       })
     }
 
@@ -73,12 +82,15 @@ export const useCheckInStore = defineStore('checkIn', () => {
 
     if (form.mediaFiles && form.mediaFiles.length > 0) {
       await db.mediaFiles.where({ checkInId: id }).delete()
+      const checkInUuid = (await db.checkIns.get(id))?.uuid || generateUUID()
       for (const item of form.mediaFiles) {
         await db.mediaFiles.add({
           checkInId: id,
+          checkInUuid: checkInUuid,
           fileType: item.type,
           blob: item.file,
           size: item.file.size,
+          uuid: generateUUID(),
           createdAt: Date.now()
         })
       }
