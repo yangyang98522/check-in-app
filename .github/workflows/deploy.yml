@@ -36,6 +36,14 @@ jobs:
       - name: Remove local env files
         run: rm -f .env .env.local .env.production .env.production.local
 
+      - name: Check secrets presence
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          echo "URL set: ${VITE_SUPABASE_URL:+yes}"
+          echo "KEY set: ${VITE_SUPABASE_ANON_KEY:+yes}"
+
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
